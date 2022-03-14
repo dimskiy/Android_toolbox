@@ -11,6 +11,14 @@ class Data<T> private constructor(
 
     fun isStateReady(): Boolean = content != null
 
+    fun <NEW_TYPE> mapData(mapper: (T) -> NEW_TYPE): Data<NEW_TYPE> = when {
+        isStateError() -> error(error!!)
+        isStateLoading() -> loading()
+        else -> ready(mapper(content!!))
+    }
+
+    override fun toString(): String = "Data(content = $content, isLoading = $isLoading, error = $error)"
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -19,7 +27,8 @@ class Data<T> private constructor(
 
         if (content != other.content) return false
         if (isLoading != other.isLoading) return false
-        if (error != other.error) return false
+        if (error?.javaClass != other.error?.javaClass) return false
+        if (error?.message != other.error?.message) return false
 
         return true
     }
@@ -30,6 +39,7 @@ class Data<T> private constructor(
         result = 31 * result + (error?.hashCode() ?: 0)
         return result
     }
+
 
     companion object {
         fun <T> loading(): Data<T> = Data(
