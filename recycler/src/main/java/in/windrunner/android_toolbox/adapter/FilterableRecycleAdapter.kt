@@ -5,9 +5,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 
 abstract class FilterableRecycleAdapter<T : FilterableItem, H : BindableHolder<T>> :
-    ListAdapter<T, H>(
-        DiffCallback<T>()
-    ) {
+    ListAdapter<T, H>(DiffCallback<T>()) {
 
     private val nonFilteredList = mutableListOf<FilterableItem>()
     private var lastFilterQuery: CharSequence = ""
