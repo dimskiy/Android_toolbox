@@ -45,8 +45,11 @@ class DataLoaderTest {
 
     @Test
     fun `network first WHEN network error`() {
+        val error = IllegalStateException("net error")
+
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
-        coEvery { dataFetcher.getFromNetwork() } throws IllegalStateException("net error")
+
+        coEvery { dataFetcher.getFromNetwork() } throws error
         coEvery { dataFetcher.getFromStorage() } returns TestModel.Storage
 
         runBlocking {
@@ -55,7 +58,8 @@ class DataLoaderTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(TestModel.Domain)
+                    Data.ready(TestModel.Domain),
+                    Data.error(error)
                 )
             )
         }
@@ -66,8 +70,11 @@ class DataLoaderTest {
     @Test
     fun `network first WHEN no network data, nor cache data`() {
         val storageError = IllegalStateException("storage error")
+        val netError = IllegalStateException("net error")
+
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
-        coEvery { dataFetcher.getFromNetwork() } throws IllegalStateException("net error")
+
+        coEvery { dataFetcher.getFromNetwork() } throws netError
         coEvery { dataFetcher.getFromStorage() } throws storageError
 
         runBlocking {
@@ -76,7 +83,7 @@ class DataLoaderTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.error<TestModel.Domain>(storageError)
+                    Data.error<TestModel.Domain>(netError)
                 )
             )
         }
@@ -202,8 +209,7 @@ class DataLoaderTest {
     private fun prepareLoader(strategy: DataLoader.Strategy) {
         loader = object : DataLoader<TestModel.Network, TestModel.Storage, TestModel.Domain>(
             strategy = strategy,
-            mapper = mapper,
-            networkTimeoutSec = 1
+            mapper = mapper
         ) {
             override suspend fun getFromNetwork(): TestModel.Network = dataFetcher.getFromNetwork()
             override suspend fun getFromStorage(): TestModel.Storage = dataFetcher.getFromStorage()

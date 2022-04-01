@@ -7,8 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.withTimeout
-import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.flow.transform
 
 /**
  * Implements cached data loading with support of these strategies: Network first, Cache first, Network only.
@@ -31,14 +30,10 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * @param mapper - data models mapper allowing to maintain different models for layered
  * app architecture.
- *
- * @param networkTimeoutSec - network timeout in seconds. The loader will fail-back depending
- * on the strategy used if the timeout gets exceeded.
  */
 abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
     private val strategy: Strategy,
-    private val mapper: DataLoaderMapper<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>,
-    private val networkTimeoutSec: Int
+    private val mapper: DataLoaderMapper<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>
 ) {
 
     /**
@@ -56,11 +51,17 @@ abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
     private fun getNetworkFirst(): Flow<Data<DOMAIN_MODEL>> = flow {
         emit(getNetworkResult())
     }
-        .map { netModel ->
+        .transform { netModel ->
             if (netModel.isStateReady()) {
-                getStorageResultSaved(netModel)
+                emit(getStorageResultSaved(netModel))
             } else {
                 getStorageResult()
+                    .takeIf { it.isStateReady() }
+                    ?.let { emit(it) }
+
+                netModel.error?.let {
+                    emit(Data.error<STORAGE_MODEL>(it))
+                }
             }
         }
         .map { it.mapData(mapper::mapStorageToDomain) }
@@ -91,9 +92,7 @@ abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
     }
 
     private suspend fun getNetworkResult(): Data<NETWORK_MODEL> = try {
-        withTimeout(networkTimeoutSec.milliseconds) {
-            Data.ready(getFromNetwork())
-        }
+        Data.ready(getFromNetwork())
     } catch (e: Throwable) {
         Data.error(e)
     }
