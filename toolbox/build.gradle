@@ -1,42 +1,15 @@
 plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
-    id 'maven-publish'
 }
 
 apply from: '../module-basic.gradle'
-
-def localGradle = new Properties()
-localGradle.load(new FileInputStream(rootProject.file("local.properties")))
 
 android {
     afterEvaluate {
         task sourceJar(type: Jar) {
             from android.sourceSets.main.java.srcDirs
             classifier "sources"
-        }
-
-        publishing {
-            publications {
-                release(MavenPublication) {
-                    groupId localGradle['maven.group']
-                    artifactId localGradle['maven.artifact']
-                    version localGradle['maven.version']
-                    artifact(sourceJar)
-                    artifact("$buildDir/outputs/aar/toolbox-release.aar")
-                }
-            }
-
-            repositories {
-                maven {
-                    name = localGradle['maven.name']
-                    url = localGradle['maven.url']
-                    credentials {
-                        username = localGradle['maven.token']
-                        password = ""
-                    }
-                }
-            }
         }
     }
 }

@@ -14,7 +14,7 @@ Set of basic building blocks to build commonly-used app scenarios, such as:
 allprojects {
     repositories {
         maven {
-            url "https://packagecloud.io/dimskiy/android-toolbox/maven2"
+            url 'https://jitpack.io'
         }
     }
 }
@@ -22,6 +22,8 @@ allprojects {
 2. Add to the app's module:
 ```
 dependencies {
-    implementation "in.windrunner.android_toolbox:android_toolbox:$version"
+    implementation 'com.github.dimskiy:Android_toolbox:VERSION'
 }
 ```
+Latest version:
+[![](https://jitpack.io/v/dimskiy/Android_toolbox.svg)](https://jitpack.io/#dimskiy/Android_toolbox)
