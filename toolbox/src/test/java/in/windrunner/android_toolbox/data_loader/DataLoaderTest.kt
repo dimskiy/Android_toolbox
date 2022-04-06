@@ -30,6 +30,7 @@ class DataLoaderTest {
     fun `network first`() {
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
         coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
+        coEvery { dataFetcher.getUpdatedOnStorage(TestModel.Storage) } returns TestModel.Storage
 
         runBlocking {
             assertThat(
@@ -96,7 +97,7 @@ class DataLoaderTest {
         val storageError = IllegalStateException("storage error")
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
         coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
-        coEvery { dataFetcher.saveToStorage(TestModel.Storage) } throws storageError
+        coEvery { dataFetcher.getUpdatedOnStorage(TestModel.Storage) } throws storageError
 
         runBlocking {
             assertThat(
@@ -109,7 +110,7 @@ class DataLoaderTest {
             )
         }
 
-        coVerify { dataFetcher.saveToStorage(TestModel.Storage) }
+        coVerify { dataFetcher.getUpdatedOnStorage(TestModel.Storage) }
     }
 
     @Test
@@ -117,6 +118,7 @@ class DataLoaderTest {
         prepareLoader(DataLoader.Strategy.CACHE_FIRST)
         coEvery { dataFetcher.getFromStorage() } returns TestModel.Storage
         coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
+        coEvery { dataFetcher.getUpdatedOnStorage(TestModel.Storage) } returns TestModel.Storage
 
         runBlocking {
             assertThat(
@@ -135,6 +137,7 @@ class DataLoaderTest {
         prepareLoader(DataLoader.Strategy.CACHE_FIRST)
         coEvery { dataFetcher.getFromStorage() } throws IllegalStateException("no cache data")
         coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
+        coEvery { dataFetcher.getUpdatedOnStorage(TestModel.Storage) } returns TestModel.Storage
 
         runBlocking {
             assertThat(
@@ -183,7 +186,7 @@ class DataLoaderTest {
             )
         }
         coVerify(exactly = 0) { dataFetcher.getFromStorage() }
-        coVerify(exactly = 0) { dataFetcher.saveToStorage(any()) }
+        coVerify(exactly = 0) { dataFetcher.getUpdatedOnStorage(any()) }
     }
 
     @Test
@@ -203,7 +206,7 @@ class DataLoaderTest {
             )
         }
         coVerify(exactly = 0) { dataFetcher.getFromStorage() }
-        coVerify(exactly = 0) { dataFetcher.saveToStorage(any()) }
+        coVerify(exactly = 0) { dataFetcher.getUpdatedOnStorage(any()) }
     }
 
     private fun prepareLoader(strategy: DataLoader.Strategy) {
@@ -213,8 +216,8 @@ class DataLoaderTest {
         ) {
             override suspend fun getFromNetwork(): TestModel.Network = dataFetcher.getFromNetwork()
             override suspend fun getFromStorage(): TestModel.Storage = dataFetcher.getFromStorage()
-            override suspend fun saveToStorage(storageModel: TestModel.Storage) =
-                dataFetcher.saveToStorage(storageModel)
+            override suspend fun getUpdatedOnStorage(storageModel: TestModel.Storage) =
+                dataFetcher.getUpdatedOnStorage(storageModel)
         }
     }
 

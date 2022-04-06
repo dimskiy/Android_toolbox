@@ -100,13 +100,13 @@ abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
     private suspend fun getStorageResultSaved(networkResult: Data<NETWORK_MODEL>): Data<STORAGE_MODEL> {
         val storageResult = networkResult.mapData(mapper::mapNetToStorage)
 
-        storageResult.content?.let {
+        return storageResult.content?.let {
             try {
-                saveToStorage(it)
-            } catch (e: Throwable) { }
-        }
-
-        return storageResult
+                Data.ready(getUpdatedOnStorage(it))
+            } catch (e: Throwable) {
+                null
+            }
+        } ?: storageResult
     }
 
     private suspend fun getStorageResult(): Data<STORAGE_MODEL> = try {
@@ -134,9 +134,11 @@ abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
     /**
      * Allows to save the data received\updated to the local storage.
      * IMPORTANT: This method does not change the execution thread.
+     * IMPORTANT-2: Ensure you getting back the actual database object saved, not the one
+     * received as the argument!
      */
     @VisibleForTesting(otherwise = PROTECTED)
-    abstract suspend fun saveToStorage(storageModel: STORAGE_MODEL)
+    abstract suspend fun getUpdatedOnStorage(storageModel: STORAGE_MODEL): STORAGE_MODEL
 
     enum class Strategy {
         NETWORK_FIRST,
