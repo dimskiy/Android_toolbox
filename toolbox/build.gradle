@@ -35,7 +35,7 @@ android {
                     from components.release
                     groupId = 'com.github.dimskiy'
                     artifactId = 'android_toolbox'
-                    version = '0.92'
+                    version = '0.95'
                 }
             }
         }

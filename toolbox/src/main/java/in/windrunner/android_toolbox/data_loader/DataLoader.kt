@@ -3,11 +3,7 @@ package `in`.windrunner.android_toolbox.data_loader
 import `in`.windrunner.android_toolbox.model.Data
 import androidx.annotation.VisibleForTesting
 import androidx.annotation.VisibleForTesting.PROTECTED
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.flow.*
 
 /**
  * Implements cached data loading with support of these strategies: Network first, Cache first, Network only.
@@ -42,7 +38,7 @@ abstract class DataLoader<NETWORK_MODEL, STORAGE_MODEL, DOMAIN_MODEL>(
      * you to implement 'loading' UI states, as well as get the updated data model as soon
      * as it is received.
      */
-    fun getData(): Flow<Data<DOMAIN_MODEL>> = when (strategy) {
+    open fun getData(): Flow<Data<DOMAIN_MODEL>> = when (strategy) {
         Strategy.NETWORK_FIRST -> getNetworkFirst()
         Strategy.CACHE_FIRST -> getCacheFirst()
         Strategy.NETWORK_ONLY -> getNetworkOnly()
