@@ -4,48 +4,29 @@ import `in`.windrunner.android_toolbox.model.Data
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
-import org.junit.Before
 import org.junit.Test
 
 class DataLoaderInfiniteTest {
-    private lateinit var loader: DataLoaderInfinite<TestModel.Network, TestModel.Storage, TestModel.Domain>
+    private lateinit var loader: DataLoaderInfinite<TestModel>
 
-    private val dataFetcher = mockk<DataLoaderInfinite<TestModel.Network, TestModel.Storage, TestModel.Domain>>(
-        relaxed = true
-    )
-    private val mapper = mockk<DataLoaderMapper<TestModel.Network, TestModel.Storage, TestModel.Domain>>()
-    
-    private val defaultStorageModel = TestModel.Storage(1)
-    private val defaultDomainModel = TestModel.Domain(1)
+    private val dataFetcher = mockk<DataLoaderInfinite<TestModel>>(relaxed = true)
 
-    @Before
-    fun setup() {
-        every { mapper.mapStorageToDomain(defaultStorageModel) } returns defaultDomainModel
-        every { mapper.mapNetToStorage(TestModel.Network) } returns defaultStorageModel
-    }
+    private val networkError = IllegalStateException("network error")
+    private val storageError = IllegalStateException("storage error")
 
     @Test
     fun `network first`() {
-        val storageItems = listOf(
-            TestModel.Storage(1),
-            TestModel.Storage(2)
-        )
-        val domainItems = listOf(
-            TestModel.Domain(1),
-            TestModel.Domain(2)
-        )
+        val networkModel = TestModel(1)
+        val storageModelUpdated = TestModel(2)
+
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
-        coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
-        coEvery { dataFetcher.observeStorage() } returns storageItems.asFlow()
-        coEvery { dataFetcher.getUpdatedOnStorage(storageItems[0]) } returns storageItems[0]
-        coEvery { dataFetcher.getUpdatedOnStorage(storageItems[1]) } returns storageItems[1]
-        coEvery { mapper.mapNetToStorage(TestModel.Network) } returns storageItems[0]
-        coEvery { mapper.mapStorageToDomain(storageItems[0]) } returns domainItems[0]
-        coEvery { mapper.mapStorageToDomain(storageItems[1]) } returns domainItems[1]
+        coEvery { dataFetcher.getFromNetwork() } returns networkModel
+        coEvery { dataFetcher.getUpdatedOnStorage(networkModel) } returns storageModelUpdated
 
         runBlocking {
             assertThat(
@@ -53,8 +34,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(domainItems[0]),
-                    Data.ready(domainItems[1])
+                    Data.ready(storageModelUpdated)
                 )
             )
         }
@@ -62,12 +42,11 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `network first WHEN network error`() {
-        val error = IllegalStateException("net error")
+        val storageModel = TestModel(2)
 
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
-
-        coEvery { dataFetcher.getFromNetwork() } throws error
-        coEvery { dataFetcher.observeStorage() } returns flowOf(defaultStorageModel)
+        coEvery { dataFetcher.getFromNetwork() } throws networkError
+        coEvery { dataFetcher.observeStorage() } returns flowOf(storageModel)
 
         runBlocking {
             assertThat(
@@ -75,8 +54,8 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(defaultDomainModel),
-                    Data.error(error)
+                    Data.ready(storageModel),
+                    Data.error(networkError)
                 )
             )
         }
@@ -86,13 +65,10 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `network first WHEN no network data, nor cache data`() {
-        val storageError = IllegalStateException("storage error")
-        val netError = IllegalStateException("net error")
-
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
 
-        coEvery { dataFetcher.getFromNetwork() } throws netError
-        coEvery { dataFetcher.observeStorage() } returns flow { throw storageError }
+        coEvery { dataFetcher.getFromNetwork() } throws networkError
+        coEvery { dataFetcher.getFromStorage() } throws storageError
 
         runBlocking {
             assertThat(
@@ -100,8 +76,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.error<TestModel.Domain>(netError),
-                    Data.error<TestModel.Domain>(storageError),
+                    Data.error<TestModel>(networkError)
                 )
             )
         }
@@ -111,10 +86,11 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `network first WHEN cache failed`() {
-        val storageError = IllegalStateException("storage error")
+        val netModel = TestModel(1)
+
         prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
-        coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
-        coEvery { dataFetcher.getUpdatedOnStorage(defaultStorageModel) } throws storageError
+        coEvery { dataFetcher.getFromNetwork() } returns netModel
+        coEvery { dataFetcher.getUpdatedOnStorage(netModel) } throws storageError
 
         runBlocking {
             assertThat(
@@ -122,28 +98,32 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(defaultDomainModel)
+                    Data.ready(netModel)
                 )
             )
         }
 
-        coVerify { dataFetcher.getUpdatedOnStorage(defaultStorageModel) }
+        coVerify { dataFetcher.getUpdatedOnStorage(netModel) }
     }
 
     @Test
     fun `cache first`() {
+        val netModel = TestModel(1)
+        val storageModelInitial = TestModel(2)
+        val storageModelUpdated = TestModel(3)
+
         prepareLoader(DataLoader.Strategy.CACHE_FIRST)
-        coEvery { dataFetcher.observeStorage() } returns flowOf(defaultStorageModel)
-        coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
-        coEvery { dataFetcher.getUpdatedOnStorage(defaultStorageModel) } returns defaultStorageModel
+        coEvery { dataFetcher.observeStorage() } returns flowOf(storageModelInitial)
+        coEvery { dataFetcher.getFromNetwork() } returns netModel
+        coEvery { dataFetcher.getUpdatedOnStorage(netModel) } returns storageModelUpdated
 
         runBlocking {
             assertThat(
                 loader.getData().toList()
             ).isEqualTo(
                 listOf(
-                    Data.ready(defaultDomainModel),
-                    Data.ready(defaultDomainModel)
+                    Data.ready(storageModelInitial),
+                    Data.ready(storageModelUpdated)
                 )
             )
         }
@@ -151,11 +131,13 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `cache first WHEN no cache data`() {
-        val storageError = IllegalStateException("no cache data")
+        val netModel = TestModel(1)
+        val storageModel = TestModel(2)
+
         prepareLoader(DataLoader.Strategy.CACHE_FIRST)
-        coEvery { dataFetcher.observeStorage() } returns flow { throw storageError }
-        coEvery { dataFetcher.getFromNetwork() } returns TestModel.Network
-        coEvery { dataFetcher.getUpdatedOnStorage(defaultStorageModel) } returns defaultStorageModel
+        coEvery { dataFetcher.getFromStorage() } throws storageError
+        coEvery { dataFetcher.getFromNetwork() } returns netModel
+        coEvery { dataFetcher.getUpdatedOnStorage(netModel) } returns storageModel
 
         runBlocking {
             assertThat(
@@ -163,8 +145,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(defaultDomainModel),
-                    Data.error(storageError)
+                    Data.ready(storageModel)
                 )
             )
         }
@@ -172,11 +153,9 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `cache first WHEN no cache data, nor network data`() {
-        val netError = IllegalStateException("no net data")
-        val storageError = IllegalStateException("no cache data")
         prepareLoader(DataLoader.Strategy.CACHE_FIRST)
-        coEvery { dataFetcher.observeStorage() } returns flow { throw storageError }
-        coEvery { dataFetcher.getFromNetwork() } throws netError
+        coEvery { dataFetcher.getFromStorage() } throws storageError
+        coEvery { dataFetcher.getFromNetwork() } throws networkError
 
         runBlocking {
             assertThat(
@@ -184,8 +163,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.error<TestModel.Domain>(netError),
-                    Data.error<TestModel.Domain>(storageError)
+                    Data.error<TestModel>(networkError)
                 )
             )
         }
@@ -193,8 +171,10 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `network only`() {
+        val netModel = TestModel(1)
+
         prepareLoader(DataLoader.Strategy.NETWORK_ONLY)
-        coEvery { dataFetcher.getFromNetwork() } returns  TestModel.Network
+        coEvery { dataFetcher.getFromNetwork() } returns netModel
 
         runBlocking {
             assertThat(
@@ -202,7 +182,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.ready(defaultDomainModel)
+                    Data.ready(netModel)
                 )
             )
         }
@@ -212,9 +192,8 @@ class DataLoaderInfiniteTest {
 
     @Test
     fun `network only WHEN no network data`() {
-        val netError = IllegalStateException("no net data")
         prepareLoader(DataLoader.Strategy.NETWORK_ONLY)
-        coEvery { dataFetcher.getFromNetwork() } throws netError
+        coEvery { dataFetcher.getFromNetwork() } throws networkError
 
         runBlocking {
             assertThat(
@@ -222,7 +201,7 @@ class DataLoaderInfiniteTest {
             ).isEqualTo(
                 listOf(
                     Data.loading(),
-                    Data.error<TestModel.Domain>(netError)
+                    Data.error<TestModel>(networkError)
                 )
             )
         }
@@ -230,25 +209,72 @@ class DataLoaderInfiniteTest {
         coVerify(exactly = 0) { dataFetcher.getUpdatedOnStorage(any()) }
     }
 
-    private fun prepareLoader(strategy: DataLoader.Strategy) {
-        loader = object : DataLoaderInfinite<TestModel.Network, TestModel.Storage, TestModel.Domain>(
-            strategy = strategy,
-            mapper = mapper
-        ) {
-            override suspend fun getFromNetwork(): TestModel.Network =
-                dataFetcher.getFromNetwork()
+    @Test
+    fun `continue flow WHEN original network first finished`() {
+        val networkModel = TestModel(1)
+        val storageModelUpdated = TestModel(2)
+        val storageModelContinued = TestModel(3)
 
-            override suspend fun observeStorage(): Flow<TestModel.Storage> =
-                dataFetcher.observeStorage()
+        prepareLoader(DataLoader.Strategy.NETWORK_FIRST)
+        coEvery { dataFetcher.getFromNetwork() } returns networkModel
+        coEvery { dataFetcher.observeStorage() } returns flowOf(
+            storageModelUpdated,
+            storageModelContinued
+        )
+        coEvery { dataFetcher.getUpdatedOnStorage(networkModel) } returns storageModelUpdated
 
-            override suspend fun getUpdatedOnStorage(storageModel: TestModel.Storage) =
-                dataFetcher.getUpdatedOnStorage(storageModel)
+        runBlocking {
+            assertThat(
+                loader.getData().toList()
+            ).isEqualTo(
+                listOf(
+                    Data.loading(),
+                    Data.ready(storageModelUpdated),
+                    Data.ready(storageModelContinued)
+                )
+            )
         }
     }
 
-    sealed class TestModel {
-        object Network : TestModel()
-        data class Storage(val id: Int) : TestModel()
-        data class Domain(val id: Int) : TestModel()
+    @Test
+    fun `continue flow WHEN original cache first finished`() {
+        val netModel = TestModel(1)
+        val storageModelInitial = TestModel(2)
+        val storageModelUpdated = TestModel(3)
+        val storageModelContinued = TestModel(4)
+
+        prepareLoader(DataLoader.Strategy.CACHE_FIRST)
+        coEvery { dataFetcher.observeStorage() } returns flowOf(
+            storageModelInitial
+        )
+        coEvery { dataFetcher.getFromNetwork() } returns netModel
+        coEvery { dataFetcher.getUpdatedOnStorage(netModel) } answers {
+            coEvery { dataFetcher.observeStorage() } returns flowOf(
+                storageModelInitial,
+                storageModelContinued
+            )
+            storageModelUpdated
+        }
+
+        runBlocking {
+            assertThat(
+                loader.getData().toList()
+            ).isEqualTo(
+                listOf(
+                    Data.ready(storageModelInitial),
+                    Data.ready(storageModelUpdated),
+                    Data.ready(storageModelContinued)
+                )
+            )
+        }
+    }
+
+    private fun prepareLoader(strategy: DataLoader.Strategy) {
+        loader = object : DataLoaderInfinite<TestModel>(strategy = strategy) {
+            override suspend fun getFromNetwork(): TestModel = dataFetcher.getFromNetwork()
+            override suspend fun observeStorage(): Flow<TestModel> = dataFetcher.observeStorage()
+            override suspend fun getUpdatedOnStorage(model: TestModel) =
+                dataFetcher.getUpdatedOnStorage(model)
+        }
     }
 }
